@@ -1,0 +1,28 @@
+#!/bin/bash
+# Efergy RTL_FM Server
+#
+# Copiar este archivo en /etc/init.d/
+#
+# description: Script que a traves del script rtl_fm captura datos de consumo electrico de un dispositivo efergy
+# version: beta
+# fecha: 23-01-2014
+# by: 1000io.com
+
+case $1 in
+    start)
+        nohup sudo rtl_fm -f 433500000 -s 200000 -r 96000 -g 30 2>/dev/null | /home/pi/efergy/EfergyRPI_pilight log2.csv &
+    ;;
+    stop)
+        killall EfergyRPI_pilight
+        killall rtf_fm
+    ;;
+    restart)
+        killall EfergyRPI_pilight
+        killall rtf_fm
+        nohup sudo rtl_fm -f 433500000 -s 200000 -r 96000 -g 30 2>/dev/null | /home/pi/efergy/EfergyRPI_pilight log2.csv &
+    ;;
+    *)
+        echo $"Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+exit 0
