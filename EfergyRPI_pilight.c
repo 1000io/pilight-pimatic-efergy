@@ -1,4 +1,3 @@
-
 /*---------------------------------------------------------------------
 
 EFERGY E2 CLASSIC RTL-SDR DECODER via rtl_fm
@@ -17,11 +16,11 @@ SUITABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
 
 Compile:
 
-gcc -lm -o EfergyRPI_001 EfergyRPI_001.c
+gcc -lm -o EfergyRPI_efergy EfergyRPI_efergy.c
 
 Execute using the following parameters:
 
-rtl_fm -f 433550000 -s 200000 -r 96000 -g 19.7 2>/dev/null | ./EfergyRPI_001
+nohup sudo rtl_fm -f 433500000 -s 200000 -r 96000 -g 30 2>/dev/null | /home/pi/efergy/EfergyRPI_pilight log2.csv
 
 --------------------------------------------------------------------- */
 // Trivial Modifications for Data Logging by Gough (me@goughlui.com)
@@ -70,6 +69,8 @@ rtl_fm -f 433550000 -s 200000 -r 96000 -g 19.7 2>/dev/null | ./EfergyRPI_001
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/types.h>
+
+#define PILIGHT_ID		100	/* Device pilight id */
 
 #define VOLTAGE 		250	/* Refernce Voltage */
 #define CENTERSAMP		100	/* Number of samples needed to compute for the wave center */
@@ -169,7 +170,7 @@ char buffer[80];
 		if (pid == -1) {
 			printf("No encontrado\n");
 		} else {
-			sprintf(String, "sudo /usr/local/sbin/pilight-send -p generic_wattmeter -i 100 -w %.2f", result*100); //redondeado a 2 decimales .2
+			sprintf(String, "sudo /usr/local/sbin/pilight-send -p generic_wattmeter -i %f -w %.2f", PILIGHT_ID, result*100); //redondeado a 2 decimales .2
 			system(String);
 		}
 		if(loggingok) {
