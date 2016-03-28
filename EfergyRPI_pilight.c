@@ -1,3 +1,4 @@
+
 /*---------------------------------------------------------------------
 
 EFERGY E2 CLASSIC RTL-SDR DECODER via rtl_fm
@@ -16,11 +17,11 @@ SUITABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
 
 Compile:
 
-gcc -lm -o EfergyRPI_efergy EfergyRPI_efergy.c
+gcc -lm -o EfergyRPI_001 EfergyRPI_001.c
 
 Execute using the following parameters:
 
-nohup sudo rtl_fm -f 433500000 -s 200000 -r 96000 -g 30 2>/dev/null | /home/pi/efergy/EfergyRPI_pilight log2.csv
+rtl_fm -f 433550000 -s 200000 -r 96000 -g 19.7 2>/dev/null | ./EfergyRPI_001
 
 --------------------------------------------------------------------- */
 // Trivial Modifications for Data Logging by Gough (me@goughlui.com)
@@ -39,7 +40,7 @@ nohup sudo rtl_fm -f 433500000 -s 200000 -r 96000 -g 30 2>/dev/null | /home/pi/e
 //
 // Also have ability to change line endings to DOS \r\n format.
 //
-// Consider changing the Voltage to match your local line voltage for 
+// Consider changing the Voltage to match your local line voltage for
 // best results.
 //
 // Poor signals seem to cause rtl_fm and this code to consume CPU and slow
@@ -63,16 +64,7 @@ nohup sudo rtl_fm -f 433500000 -s 200000 -r 96000 -g 30 2>/dev/null | /home/pi/e
 
 #include <stdlib.h> // For exit function
 
-//Librerias necesarias para comprobar si pilight esta funcionando
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <sys/types.h>
-
-#define PILIGHT_ID		100	/* Device pilight id */
-
-#define VOLTAGE 		250	/* Refernce Voltage */
+#define VOLTAGE 		240	/* Refernce Voltage */
 #define CENTERSAMP		100	/* Number of samples needed to compute for the wave center */
 #define PREAMBLE_COUNT		40	/* Number of high(1) samples for a valid preamble */
 #define MINLOWBIT		3	/* Number of high(1) samples for a logic 0 */
@@ -81,59 +73,16 @@ nohup sudo rtl_fm -f 433500000 -s 200000 -r 96000 -g 30 2>/dev/null | /home/pi/e
 #define FRAMEBITCOUNT		64	/* Number of bits for the entire frame (not including preamble) */
 
 
-#define LOGTYPE 	   0 // Allows changing line-endings - 0 is for Unix /n, 1 for Windows /r/n
-#define SAMPLES_TO_FLUSH  10 // Number of samples taken before writing to file.
+#define LOGTYPE 	   1 // Allows changing line-endings - 0 is for Unix /n, 1 for Windows /r/n
+#define SAMPLES_TO_FLUSH  1 // Number of samples taken before writing to file.
 			     // Setting this too low will cause excessive wear to flash due to updates to
 			     // filesystem! You have been warned! Set to 10 samples for 6 seconds = every min.
+#define MAXWAT			20000 // Max watt to aboid read errors
+#define EUROWATHORA		0.000125 // Price watt/hour
 
 int loggingok;	 // Global var indicating logging on or off
 int samplecount; // Global var counter for samples taken since last flush
 FILE *fp;	 // Global var file handle
-
-
-//funcion para detectar si un proceso esta funcionando
-pid_t proc_find(const char* name) 
-{
-    DIR* dir;
-    struct dirent* ent;
-    char* endptr;
-    char buf[512];
-
-    if (!(dir = opendir("/proc"))) {
-        perror("can't open /proc");
-        return -1;
-    }
-
-    while((ent = readdir(dir)) != NULL) {
-        /* if endptr is not a null character, the directory is not
-         * entirely numeric, so ignore it */
-        long lpid = strtol(ent->d_name, &endptr, 10);
-        if (*endptr != '\0') {
-            continue;
-        }
-
-        /* try to open the cmdline file */
-        snprintf(buf, sizeof(buf), "/proc/%ld/cmdline", lpid);
-        FILE* fp = fopen(buf, "r");
-
-        if (fp) {
-            if (fgets(buf, sizeof(buf), fp) != NULL) {
-                /* check the first token in the file, the program name */
-                char* first = strtok(buf, " ");
-                if (!strcmp(first, name)) {
-                    fclose(fp);
-                    closedir(dir);
-                    return (pid_t)lpid;
-                }
-            }
-            fclose(fp);
-        }
-
-    }
-
-    closedir(dir);
-    return -1;
-}
 
 int calculate_watts(char bytes[])
 {
@@ -141,9 +90,11 @@ int calculate_watts(char bytes[])
 char tbyte;
 double current_adc;
 double result;
+double last_result;
+double total_euros;
 int i;
 
-time_t ltime; 
+time_t ltime;
 struct tm *curtime;
 char buffer[80];
 
@@ -163,21 +114,22 @@ char buffer[80];
 		time( &ltime );
 		curtime = localtime( &ltime );
 		strftime(buffer,80,"%x,%X", curtime);
+
 		current_adc = (bytes[4] * 256) + bytes[5];
 		result	= (VOLTAGE * current_adc) / ((double) 32768 / (double) pow(2,bytes[6]));
-		char String[255];
-		pid_t pid = proc_find("pilight-daemon");
-		if (pid == -1) {
-			printf("No encontrado\n");
-		} else {
-			sprintf(String, "sudo /usr/local/sbin/pilight-send -p generic_wattmeter -i %f -w %.2f", PILIGHT_ID, result*100); //redondeado a 2 decimales .2
-			system(String);
-		}
+		printf("%s,%f\n",buffer,result);
 		if(loggingok) {
+		  if ((result>MAXWAT) || (result<=0)) {
+		    result = last_result;
+		  }
+		  total_euros = EUROWATHORA*result;
+		  last_result = result;
 		  if(LOGTYPE) {
-		    fprintf(fp,"%s,%f\r\n",buffer,result);
+		    fprintf(fp,"date:%s,wat:%f,euro:%f\r\n",buffer,result,total_euros);
+	            //fprintf(fp,"%f\r\n",result);
 		  } else {
-		    fprintf(fp,"%s,%f\n",buffer,result);
+		    fprintf(fp,"date:%s,wat:%f,euro:%f\n",buffer,result,total_euros);
+	            //fprintf(fp,"%f\r\n",result);
 		  }
 		  samplecount++;
 		  if(samplecount==SAMPLES_TO_FLUSH) {
@@ -192,7 +144,7 @@ char buffer[80];
 	return 0;
 }
 
-void  main (int argc, char**argv) 
+void  main (int argc, char**argv)
 {
 
 char bytearray[9];
@@ -226,9 +178,8 @@ long center;
 
 	printf("Efergy E2 Classic decode \n\n");
 
-
 	/* initialize variables */
-	
+
 	cursamp = 0;
 	prvsamp = 0;
 
@@ -243,17 +194,17 @@ long center;
 	dcenter = CENTERSAMP;
 	center = 0;
 
-	while( !feof(stdin) ) 
+	while( !feof(stdin) )
 	{
 
 		cursamp  = (int16_t) (fgetc(stdin) | fgetc(stdin)<<8);
 
 		/* initially capture CENTERSAMP samples for wave center computation */
-		
+
 		if (dcenter > 0)
 		{
 			dcenter--;
-			center = center + cursamp;	/* Accumulate FSK wave data */ 
+			center = center + cursamp;	/* Accumulate FSK wave data */
 
 			if (dcenter == 0)
 			{
@@ -275,14 +226,14 @@ long center;
 		{
 			if ((cursamp > center) && (prvsamp < center))		/* Detect for positive edge of frame data */
 				hctr = 0;
-			else 
+			else
 				if ((cursamp > center) && (prvsamp > center))		/* count samples at high logic */
 				{
 					hctr++;
-					if (hctr > PREAMBLE_COUNT)	
+					if (hctr > PREAMBLE_COUNT)
 						preamble = 1;
 				}
-				else 
+				else
 					if (( cursamp < center) && (prvsamp > center))
 					{
 						/* at negative edge */
@@ -290,7 +241,7 @@ long center;
 						if ((hctr > MINLOWBIT) && (frame == 1))
 						{
 							dbit++;
-							bitpos++;	
+							bitpos++;
 							bytedata = bytedata << 1;
 							if (hctr > MINHIGHBIT)
 								bytedata = bytedata | 0x1;
@@ -313,9 +264,9 @@ long center;
 										dcenter = CENTERSAMP;	/* make dcenter non-zero to trigger center resampling */
 								}
 							}
-							
+
 							if (dbit > FRAMEBITCOUNT)
-							{	
+							{
 								/* reset frame variables */
 
 								bitpos = 0;
@@ -329,7 +280,7 @@ long center;
 
 						hctr = 0;
 
-					} 
+					}
 					else
 						hctr = 0;
 
