@@ -66,9 +66,9 @@ pimatic config example:
         }
       ]
     }
-    
-  Thanks to
-  ---------
+
+Thanks to
+---------
   
-  @Nathaniel Elijah
-  @Gough Lui
+@Nathaniel Elijah
+@Gough Lui
